@@ -124,33 +124,16 @@ The `/agent` endpoint returns a `StreamingResponse` with `text/event-stream`. It
 
 ## Key Design Decisions
 
-### 1. Multi-agent specialisation over a single general-purpose agent
 
-A single LLM with a "do everything" prompt produces shallow answers. A `developer` agent asked to explain authentication will search for auth-related symbols and trace call paths. An `architecture` agent asked the same question maps module dependencies. Specialisation lets each agent have a focused system prompt and a tailored tool set, giving better answers without increasing cost.
-
-The LLM-based supervisor adds one cheap inference call per turn. The alternative (keyword regex routing) is brittle — "how do I test auth?" is clearly a `testing` question but regex would miss it.
-
-### 2. AST-level chunking for Python, not fixed-size splitting
-
-Splitting code at fixed character counts breaks functions mid-body and merges unrelated functions into one chunk — both hurt retrieval precision. Using Python's `ast` module, each function and class becomes its own Document, preserving semantic boundaries. TypeScript/JS gets a regex approximation of the same idea. For prose documents (PDF, DOCX) character splitting with overlap is fine because there are no syntactic boundaries to preserve.
-
-### 3. ChromaDB in-process, not a separate service
+### 1. ChromaDB in-process, not a separate service
 
 ChromaDB can run embedded in the FastAPI process (no separate container, no network hop). For a single-user tool with codebases that fit in memory this is fast and operationally simple. The tradeoff is that it doesn't scale horizontally — but that's out of scope for this problem.
 
-### 4. OpenAI-compatible embedding client with `check_embedding_ctx_length=False`
-
-Mistral's embedding API is OpenAI-compatible but does not accept pre-tokenized integer arrays — it requires raw strings. `langchain_openai.OpenAIEmbeddings` by default pre-tokenizes input using tiktoken before sending, which causes a 422 error from Mistral. Setting `check_embedding_ctx_length=False` bypasses tokenization and sends plain strings. This is a one-line fix that keeps the dependency count low (no need for `langchain-mistralai`).
-
-### 5. Shallow clone (`depth=1`) for GitHub ingestion
+### 2. Shallow clone (`depth=1`) for GitHub ingestion
 
 A full clone of a large repo can take tens of seconds and gigabytes of disk. Depth-1 gets the latest snapshot of every file in seconds. History is irrelevant for documentation questions.
 
-### 6. Frontend calls FastAPI directly, not via CopilotKit's managed runtime
-
-CopilotKit's `RemoteRuntime` is designed for its own agentic loop and adds middleware that conflicts with raw SSE streaming from LangGraph. Since we own both ends of the protocol, the frontend's `ChatPanel` establishes the SSE connection directly to `/agent` and parses AG-UI events manually. This gives full control over the streaming UX and removes the need for the CopilotKit backend package.
-
-### 7. Graceful out-of-scope handling for non-content questions
+### 3. Graceful out-of-scope handling for non-content questions
 
 The supervisor's prompt explicitly instructs the LLM to classify off-topic questions (general knowledge, recipes, jokes, weather, etc.) as `out_of_scope`. The system then routes those to a lightweight `out_of_scope_agent` which returns a polite, brief message:
 - *No content ingested yet:* "Please ingest a codebase first..."

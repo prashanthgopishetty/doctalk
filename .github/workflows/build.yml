@@ -1,0 +1,123 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+
+jobs:
+  backend-build:
+    name: Backend Build & Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Lint with pylint (optional)
+        working-directory: ./backend
+        run: |
+          pip install pylint
+          pylint app --fail-under=8.0 || true
+        continue-on-error: true
+      
+      - name: Type check with mypy (optional)
+        working-directory: ./backend
+        run: |
+          pip install mypy types-requests
+          mypy app || true
+        continue-on-error: true
+      
+      - name: Verify imports and basic syntax
+        working-directory: ./backend
+        run: |
+          python -c "from app.graphs.main_graph import build_graph; g = build_graph(); print('✓ LangGraph OK')"
+          python -c "from app.api.chat import router; print('✓ Chat API OK')"
+          python -c "from app.api.ingestion import router; print('✓ Ingestion API OK')"
+  
+  frontend-build:
+    name: Frontend Build & Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: ["18.x", "20.x"]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ./frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Lint with ESLint
+        working-directory: ./frontend
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Type check with TypeScript
+        working-directory: ./frontend
+        run: npx tsc --noEmit
+        continue-on-error: true
+      
+      - name: Build production bundle
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+  
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build backend Docker image (dry-run)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: doctalk-backend:latest
+      
+      - name: Build frontend Docker image (dry-run)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          tags: doctalk-frontend:latest
