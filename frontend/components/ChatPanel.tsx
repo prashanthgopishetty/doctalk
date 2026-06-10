@@ -1,9 +1,22 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { AgentType } from "@/lib/types";
 import { AgentThinking } from "./AgentThinking";
 import { ToolCallDisplay } from "./ToolCallDisplay";
+
+const AGENT_LABELS: Record<string, string> = {
+  developer_agent:         "Developer Agent",
+  architecture_agent:      "Architecture Agent",
+  testing_agent:           "Testing Agent",
+  self_improvement_agent:  "Self-Improvement Agent",
+  documentation_agent:     "Documentation Agent",
+  out_of_scope_agent:      "DocTalk",
+  out_of_scope:            "DocTalk",
+  "Out Of Scope Agent":    "DocTalk",
+  DocTalk:                 "DocTalk",
+};
 
 type ChatPanelProps = {
   codebaseId: string | null;
@@ -173,7 +186,7 @@ export function ChatPanel({ codebaseId, agentHint, backendUrl }: ChatPanelProps)
           >
             {msg.agentName && msg.role === "assistant" && (
               <span className="text-xs text-slate-500 px-1">
-                {msg.agentName}
+                {AGENT_LABELS[msg.agentName] ?? msg.agentName}
               </span>
             )}
             {msg.toolCalls && msg.toolCalls.length > 0 && (
@@ -185,13 +198,46 @@ export function ChatPanel({ codebaseId, agentHint, backendUrl }: ChatPanelProps)
             )}
             {msg.content && (
               <div
-                className={`max-w-2xl rounded-xl px-4 py-3 text-sm whitespace-pre-wrap break-words ${
+                className={`max-w-2xl rounded-xl px-4 py-3 text-sm ${
                   msg.role === "user"
-                    ? "bg-violet-600 text-white"
+                    ? "bg-violet-600 text-white whitespace-pre-wrap break-words"
                     : "bg-slate-800 text-slate-100 border border-slate-700"
                 }`}
               >
-                {msg.content}
+                {msg.role === "user" ? (
+                  msg.content
+                ) : (
+                  <div className="prose-sm prose-invert max-w-none">
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                        code: ({ inline, children }) => 
+                          inline ? (
+                            <code className="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200 font-mono text-xs">
+                              {children}
+                            </code>
+                          ) : (
+                            <code className="bg-slate-900 text-slate-200 font-mono text-xs block p-3 rounded mb-2 overflow-auto">
+                              {children}
+                            </code>
+                          ),
+                        pre: ({ children }) => <pre className="mb-2">{children}</pre>,
+                        h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-2 first:mt-0">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
+                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                        li: ({ children }) => <li className="ml-2">{children}</li>,
+                        blockquote: ({ children }) => <blockquote className="border-l-4 border-violet-500 pl-3 italic mb-2">{children}</blockquote>,
+                        a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 underline">{children}</a>,
+                        strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </div>
             )}
           </div>

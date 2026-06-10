@@ -5,11 +5,21 @@ type AgentThinkingProps = {
 };
 
 const AGENT_DISPLAY: Record<string, { label: string; color: string }> = {
-  "Developer Agent": { label: "Developer Agent", color: "text-blue-400" },
-  "Architecture Agent": { label: "Architecture Agent", color: "text-emerald-400" },
-  "Testing Agent": { label: "Testing Agent", color: "text-yellow-400" },
-  "Self Improvement Agent": { label: "Self-Improvement Agent", color: "text-orange-400" },
-  "Documentation Agent": { label: "Documentation Agent", color: "text-purple-400" },
+  "Developer Agent":       { label: "Developer Agent",          color: "text-blue-400" },
+  "Architecture Agent":    { label: "Architecture Agent",       color: "text-emerald-400" },
+  "Testing Agent":         { label: "Testing Agent",            color: "text-yellow-400" },
+  "Self Improvement Agent":{ label: "Self-Improvement Agent",   color: "text-orange-400" },
+  "Documentation Agent":   { label: "Documentation Agent",     color: "text-purple-400" },
+  // node-name variants emitted by LangGraph
+  developer_agent:         { label: "Developer Agent",          color: "text-blue-400" },
+  architecture_agent:      { label: "Architecture Agent",       color: "text-emerald-400" },
+  testing_agent:           { label: "Testing Agent",            color: "text-yellow-400" },
+  self_improvement_agent:  { label: "Self-Improvement Agent",   color: "text-orange-400" },
+  documentation_agent:     { label: "Documentation Agent",     color: "text-purple-400" },
+  out_of_scope_agent:      { label: "DocTalk",                  color: "text-slate-400" },
+  out_of_scope:            { label: "DocTalk",                  color: "text-slate-400" },
+  "Out Of Scope Agent":    { label: "DocTalk",                  color: "text-slate-400" },
+  DocTalk:                 { label: "DocTalk",                  color: "text-slate-400" },
 };
 
 export function AgentThinking({ agentName }: AgentThinkingProps): React.ReactElement {

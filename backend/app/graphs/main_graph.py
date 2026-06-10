@@ -9,7 +9,7 @@ from app.agents.documentation_agent import documentation_agent_node
 from app.agents.self_improvement_agent import self_improvement_agent_node
 from app.agents.testing_agent import testing_agent_node
 from app.graphs.state import AgentState
-from app.graphs.supervisor import route_to_agent, supervisor_node
+from app.graphs.supervisor import out_of_scope_node, route_to_agent, supervisor_node
 
 
 @lru_cache
@@ -17,7 +17,7 @@ def build_graph() -> Any:
     """Build and compile the DocTalk multi-agent StateGraph.
 
     Graph topology:
-        supervisor → (developer | architecture | testing | self_improvement | documentation) → END
+        supervisor → (developer | architecture | testing | self_improvement | documentation | out_of_scope) → END
     """
     builder: StateGraph = StateGraph(AgentState)
 
@@ -28,6 +28,7 @@ def build_graph() -> Any:
     builder.add_node("testing_agent", testing_agent_node)
     builder.add_node("self_improvement_agent", self_improvement_agent_node)
     builder.add_node("documentation_agent", documentation_agent_node)
+    builder.add_node("out_of_scope_agent", out_of_scope_node)
 
     # Entry point
     builder.set_entry_point("supervisor")
@@ -42,6 +43,7 @@ def build_graph() -> Any:
             "testing": "testing_agent",
             "self_improvement": "self_improvement_agent",
             "documentation": "documentation_agent",
+            "out_of_scope": "out_of_scope_agent",
         },
     )
 
@@ -52,6 +54,7 @@ def build_graph() -> Any:
         "testing_agent",
         "self_improvement_agent",
         "documentation_agent",
+        "out_of_scope_agent",
     ]:
         builder.add_edge(node, END)
 

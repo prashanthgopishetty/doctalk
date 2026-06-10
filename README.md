@@ -1,6 +1,6 @@
-# DocTalk — Multi-Agent Code Documentation Assistant
+# DocTalk — Multi-Agent Documentation Assistant
 
-A conversational AI system that lets you point at any codebase — GitHub URL, local path, or uploaded files — and ask natural-language questions about it. Answers are streamed back in real time via a multi-agent LangGraph pipeline.
+A conversational AI system that lets you ingest any codebase or document — GitHub URLs, local paths, or uploaded files (code, PDFs, Word docs, Markdown, etc.) — and ask natural-language questions about it. Answers are streamed back in real time via a multi-agent LangGraph pipeline.
 
 ---
 
@@ -20,14 +20,16 @@ A conversational AI system that lets you point at any codebase — GitHub URL, l
 
 ## Problem Statement
 
-**Option 2 — Code Documentation Assistant**
+**Option 2 — Documentation Assistant**
 
-Large codebases are hard to navigate. Developers waste time grepping for where things are, what a function does, or whether something is tested. LLMs can answer those questions — but only if they are given the right context.
+Large codebases and document collections are hard to navigate. Developers and knowledge workers waste time searching for where things are, what a function does, what a policy says, or whether something is tested. LLMs can answer those questions — but only if they are given the right context.
 
 DocTalk solves this by:
-1. **Ingesting** a codebase into a semantic vector index (ChromaDB)
+1. **Ingesting** any codebase or document collection into a semantic vector index (ChromaDB)
 2. **Routing** each question to a specialist agent that knows what tools to use
 3. **Streaming** grounded answers token-by-token back to the user
+
+Whether you're exploring code (Python, TypeScript, JavaScript, etc.), PDF technical manuals, Word documents, Markdown guides, or a mix of all of them, DocTalk understands the content and answers questions accurately.
 
 ---
 
@@ -147,6 +149,14 @@ A full clone of a large repo can take tens of seconds and gigabytes of disk. Dep
 ### 6. Frontend calls FastAPI directly, not via CopilotKit's managed runtime
 
 CopilotKit's `RemoteRuntime` is designed for its own agentic loop and adds middleware that conflicts with raw SSE streaming from LangGraph. Since we own both ends of the protocol, the frontend's `ChatPanel` establishes the SSE connection directly to `/agent` and parses AG-UI events manually. This gives full control over the streaming UX and removes the need for the CopilotKit backend package.
+
+### 7. Graceful out-of-scope handling for non-content questions
+
+The supervisor's prompt explicitly instructs the LLM to classify off-topic questions (general knowledge, recipes, jokes, weather, etc.) as `out_of_scope`. The system then routes those to a lightweight `out_of_scope_agent` which returns a polite, brief message:
+- *No content ingested yet:* "Please ingest a codebase first..."
+- *Off-topic query:* "I'm only able to answer questions about the ingested content..."
+
+This prevents hallucinated answers to questions outside the system's expertise, improves user experience by redirecting intent clearly, and avoids wasting API calls on impossible questions. The supervisor's token output is also filtered out (via `on_chat_model_stream` guard) so only agent responses appear to the user, not routing decisions.
 
 ---
 
@@ -279,9 +289,10 @@ npm run dev
 
 ### Using the UI
 
-1. **Ingest a codebase** — paste a GitHub URL, enter a local path (or use Browse), or upload `.py`, `.ts`, `.js`, `.md`, `.pdf`, `.docx` files
+1. **Ingest a codebase or documents** — paste a GitHub URL, enter a local path (or use Browse), or upload `.py`, `.ts`, `.js`, `.md`, `.pdf`, `.docx` files or any combination
 2. **Ask questions** — type naturally in the chat box; the system routes your question automatically
 3. **Watch the agent work** — the step indicator shows which agent is active and any tool calls it makes in real time
+4. **Stay on-topic** — the system gracefully handles off-topic questions by politely redirecting you to questions about the ingested content (e.g. "summarize this", "how does X work?", "show me the architecture")
 
 ---
 
@@ -317,7 +328,7 @@ EMBEDDING_BASE_URL=http://localhost:11434/v1
 
 ### `POST /ingest`
 
-Ingest a GitHub URL or local path.
+Ingest a GitHub URL, local path, or directory of documents (code and/or files).
 
 ```json
 {
@@ -332,13 +343,13 @@ Response:
 {
   "codebase_id": "abc123",
   "documents_indexed": 412,
-  "message": "Successfully indexed 412 code chunks."
+  "message": "Successfully indexed 412 chunks from code and documents."
 }
 ```
 
 ### `POST /ingest/upload`
 
-Multipart form upload of one or more files. Returns the same `IngestResponse` shape.
+Multipart form upload of one or more code or document files (`.py`, `.ts`, `.js`, `.md`, `.pdf`, `.docx`, etc.). Returns the same `IngestResponse` shape.
 
 ### `GET /ingest`
 
@@ -373,10 +384,10 @@ Returns a `text/event-stream` of AG-UI events.
 
 **Re-ranking** — ChromaDB's cosine similarity retrieval is a good first pass but often returns noisy results. Adding a cross-encoder re-ranker (e.g. `flashrank`) over the top-20 candidates before passing to the LLM would improve answer quality measurably.
 
-**Incremental re-ingestion** — today re-ingesting a repo replaces the whole collection. File-level change detection (compare file hashes against stored metadata) would let the system update only changed files, making it practical for large repos under active development.
+**Incremental re-ingestion** — today re-ingesting a source replaces the whole collection. File-level change detection (compare file hashes against stored metadata) would let the system update only changed files, making it practical for large repos and document sets under active development.
 
 **Agent feedback loop** — if the LLM's initial tool call returns poor results, the agent currently just answers with what it has. Adding a self-critique step ("did these results answer the question? if not, reformulate the query") would reduce hallucination on difficult queries.
 
 **Structured output for architecture queries** — the architecture agent currently returns prose. Returning a JSON dependency graph that the frontend renders as an interactive diagram would make it far more useful.
 
-**Auth & multi-tenancy** — add JWT authentication and scope ChromaDB collections per user so multiple people can maintain their own codebase indexes without interference.
+**Auth & multi-tenancy** — add JWT authentication and scope ChromaDB collections per user so multiple people can maintain their own code and document indexes without interference.

@@ -11,6 +11,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:800
 export default function Home(): React.ReactElement {
   const [codebase, setCodebase] = useState<CodebaseInfo | null>(null);
   const [agentHint, setAgentHint] = useState<AgentType>("auto");
+  const [githubToken, setGithubToken] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col h-screen">
@@ -31,7 +32,12 @@ export default function Home(): React.ReactElement {
       </header>
       <div className="flex flex-1 min-h-0">
         <aside className="w-80 shrink-0 flex flex-col gap-4 p-4 border-r border-slate-800 bg-slate-950 overflow-y-auto">
-          <IngestionPanel onIngested={setCodebase} backendUrl={BACKEND_URL} />
+          <IngestionPanel
+            onIngested={setCodebase}
+            backendUrl={BACKEND_URL}
+            githubToken={githubToken}
+            onGithubTokenSet={setGithubToken}
+          />
           {codebase && (
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 flex flex-col gap-1">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Active Codebase</p>

@@ -54,6 +54,53 @@ async def load_github_repo(
         docs = walk_directory(Path(tmp_dir), codebase_id)
         logger.info("Loaded %d chunks from GitHub repo: %s", len(docs), url)
         return docs
+    except git.GitCommandError as exc:
+        stderr = str(exc.stderr or "").lower()
+        stdout = str(exc.stdout or "").lower()
+        exc_str = str(exc).lower()
+        combined = stderr + stdout + exc_str
+
+        # Auth / access failures — GitHub returns 404 for both private repos AND
+        # repos that don't exist (to avoid leaking existence). We treat "not found"
+        # without a token as a potential private-repo scenario so the UI can prompt
+        # for credentials. With a token already supplied, it's a genuine access denial.
+        _auth_keywords = (
+            "authentication failed",
+            "could not read username",
+            "invalid username or password",
+            "access denied",
+        )
+        _not_found_keywords = (
+            "not found",       # covers "remote: Not Found" and "repository '...' not found"
+            "does not exist",
+        )
+        _http_errors = ("' 403", "' 401", " 403 ", " 401 ")
+
+        is_auth_error = any(kw in combined for kw in _auth_keywords)
+        is_not_found = any(kw in combined for kw in _not_found_keywords)
+        is_http_error = any(kw in combined for kw in _http_errors)
+
+        if is_auth_error or is_http_error:
+            raise PermissionError(
+                "GitHub authentication failed. "
+                "Please provide a valid Personal Access Token with 'repo' scope."
+            ) from exc
+
+        if is_not_found:
+            if github_token:
+                # Had a token but still got 404 → repo genuinely inaccessible
+                raise PermissionError(
+                    "Repository not found or your token does not have access. "
+                    "Verify the URL is correct and the token has 'repo' scope."
+                ) from exc
+            else:
+                # No token — could be a private repo (GitHub hides private repos as 404)
+                raise PermissionError(
+                    "Repository not found. If this is a private repository, "
+                    "please provide a Personal Access Token."
+                ) from exc
+
+        raise
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

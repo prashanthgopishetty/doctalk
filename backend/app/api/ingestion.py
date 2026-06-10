@@ -20,6 +20,7 @@ class IngestRequest(BaseModel):
     source: str
     source_type: Literal["github", "local"]
     codebase_id: str | None = None  # if None, a new UUID is generated
+    github_token: str | None = None  # per-request PAT for private repos
 
     @field_validator("source")
     @classmethod
@@ -60,9 +61,13 @@ async def ingest_codebase(
 
     try:
         if body.source_type == "github":
-            docs = await load_github_repo(body.source, codebase_id, settings.github_token)
+            # Per-request token takes precedence over env-level token
+            token = body.github_token or settings.github_token
+            docs = await load_github_repo(body.source, codebase_id, token)
         else:
             docs = await load_local_path(body.source, codebase_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except Exception as exc:

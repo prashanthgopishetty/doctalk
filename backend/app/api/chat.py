@@ -63,15 +63,42 @@ async def _generate_events(body: RunAgentInput) -> AsyncIterator[str]:
             name = event.get("name", "")
 
             if kind == "on_chain_start" and name not in ("LangGraph", "__start__", "supervisor"):
-                step_name = name.replace("_agent", "").replace("_", " ").title() + " Agent"
+                step_name = "DocTalk" if name == "out_of_scope_agent" else (
+                    name.replace("_agent", "").replace("_", " ").title() + " Agent"
+                )
                 current_step = name
                 yield _ag_ui_event("StepStarted", {"stepName": step_name})
 
             elif kind == "on_chain_end" and name == current_step:
-                step_name = name.replace("_agent", "").replace("_", " ").title() + " Agent"
+                step_name = "DocTalk" if name == "out_of_scope_agent" else (
+                    name.replace("_agent", "").replace("_", " ").title() + " Agent"
+                )
+
+                # out_of_scope_agent returns an AIMessage directly (no LLM stream),
+                # so we must forward its content here as text events.
+                if name == "out_of_scope_agent":
+                    output = event.get("data", {}).get("output", {})
+                    oos_messages = output.get("messages", []) if isinstance(output, dict) else []
+                    for oos_msg in oos_messages:
+                        content = getattr(oos_msg, "content", "") or ""
+                        if content:
+                            if not current_msg_id:
+                                current_msg_id = uuid.uuid4().hex
+                                yield _ag_ui_event("TextMessageStart", {
+                                    "messageId": current_msg_id,
+                                    "role": "assistant",
+                                })
+                            yield _ag_ui_event("TextMessageContent", {
+                                "messageId": current_msg_id,
+                                "delta": content,
+                            })
+
                 yield _ag_ui_event("StepFinished", {"stepName": step_name})
 
-            elif kind == "on_chat_model_stream":
+            elif kind == "on_chat_model_stream" and current_step:
+                # Guard: only forward tokens when inside an agent node.
+                # Without this, the supervisor's own LLM response (e.g. "out_of_scope")
+                # leaks into the chat as visible text.
                 chunk = event["data"]["chunk"]
                 delta = chunk.content if hasattr(chunk, "content") else ""
                 if delta:
@@ -117,7 +144,21 @@ async def _generate_events(body: RunAgentInput) -> AsyncIterator[str]:
 
     except Exception as exc:
         logger.exception("Agent run failed: thread=%s run=%s", thread_id, run_id)
-        yield _ag_ui_event("RunError", {"message": str(exc), "code": "AGENT_ERROR"})
+        
+        # Provide user-friendly error messages for common API issues
+        error_message = str(exc)
+        user_message = error_message
+        
+        if "429" in error_message or "rate_limit" in error_message.lower():
+            user_message = "⏱️ API rate limit exceeded. Please wait a moment and try again. If this persists, check your API plan or consider using local Ollama."
+        elif "401" in error_message or "unauthorized" in error_message.lower():
+            user_message = "🔑 API authentication failed. Check your API key in backend/.env"
+        elif "timeout" in error_message.lower():
+            user_message = "⏳ Request timed out. The API is taking too long to respond. Please try again."
+        elif "connection" in error_message.lower():
+            user_message = "🌐 Connection error. Check your internet connection and API endpoint URL."
+        
+        yield _ag_ui_event("RunError", {"message": user_message, "code": "AGENT_ERROR"})
         return
 
     yield _ag_ui_event("RunFinished", {"threadId": thread_id, "runId": run_id})
